@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+data/raw/
+data/processed/
+data/curated/
+data/marts/
+data/sales_workspace.db
+data/*.parquet
+profile_report.json
+reports/*.json
+.pytest_cache/
+b2_download_file_by_id
+/b2_download_file_by_id

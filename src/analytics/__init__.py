@@ -1,0 +1,1 @@
+"""DuckDB analytics and signal generation."""

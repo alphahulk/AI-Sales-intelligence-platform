@@ -1,0 +1,1 @@
+{"input":{"canonical_org":"example corp","opportunity_score":75},"expected":{"requires_evidence":true}}
