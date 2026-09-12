@@ -16,8 +16,9 @@ sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 from evals.judge import aggregate, score_output
+from src.ai.base_provider import ProviderError
 from src.ai.generate import build_account_evidence, compose_prompt
-from src.ai.provider import ProviderError, complete, configured, model_name
+from src.ai.provider import complete, configured, model_name, get_active_provider
 from src.ai.tracing import estimate_cost_usd
 
 DATASET = Path(__file__).parent / "datasets" / "prospect_audit.jsonl"
@@ -78,20 +79,22 @@ def main() -> int:
     cases = load_cases()
     live = configured() and not args.offline
     if not live and not args.offline and not configured():
-        print("No AI_API_KEY / GOOGLE_API_KEY. Re-run after setting a key, or pass --offline.")
+        print("No AI provider configured. Set AI_API_KEY, GOOGLE_API_KEY, or CLAUDE_API_KEY in .env, or pass --offline.")
         return 1
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     previous_path = RESULTS_DIR / "previous.json"
     previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.exists() else None
+    provider_name = get_active_provider() if live else "none"
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model_name() if live else "offline-fixture",
+        "provider": provider_name,
         "dataset": str(DATASET.relative_to(ROOT)),
         "cases": len(cases),
         "versions": {},
     }
-    print(f"Loaded {len(cases)} evaluation cases ({'live Gemini' if live else 'offline fixtures'})")
+    print(f"Loaded {len(cases)} evaluation cases ({'live ' + provider_name if live else 'offline fixtures'})")
     for version in ("audit/v1", "audit/v2"):
         try:
             summary = evaluate_version(version, cases, live=live)

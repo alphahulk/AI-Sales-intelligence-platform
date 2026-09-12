@@ -7,3 +7,4 @@ python-dotenv>=1.0
 streamlit>=1.38
 tldextract>=5.1
 zstandard>=0.23
+anthropic>=0.18.0

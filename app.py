@@ -299,21 +299,21 @@ def render_ai(account: dict, signals: list[dict], view: str = "radar") -> None:
     if action == "Prospect audit":
         state_key = f"audit_{widget_key}"
         if st.button("Generate prospect audit", key=f"generate_audit_{widget_key}"):
-            with st.spinner("Calling Gemini with account evidence..."):
+            with st.spinner("Calling AI provider with account evidence..."):
                 st.session_state[state_key] = run_prospect_audit(account, signals)
         if state_key in st.session_state:
             render_generation(st.session_state[state_key])
     elif action == "Meeting preparation":
         state_key = f"meeting_{widget_key}"
         if st.button("Generate meeting brief", key=f"generate_meeting_{widget_key}"):
-            with st.spinner("Calling Gemini with account evidence..."):
+            with st.spinner("Calling AI provider with account evidence..."):
                 st.session_state[state_key] = run_meeting_prep(account, signals)
         if state_key in st.session_state:
             render_generation(st.session_state[state_key])
     else:
         state_key = f"outreach_{widget_key}"
         if st.button("Generate outreach draft", key=f"generate_outreach_{widget_key}"):
-            with st.spinner("Calling Gemini with account evidence..."):
+            with st.spinner("Calling AI provider with account evidence..."):
                 st.session_state[state_key] = run_outreach_draft(account, signals)
         if state_key in st.session_state:
             render_generation(st.session_state[state_key])
@@ -345,7 +345,7 @@ def render_ask(matches: list[dict]) -> None:
         if not question.strip():
             st.warning("Enter a question, or use the table below as usual.")
         else:
-            with st.spinner("Searching accounts, then asking Gemini to explain..."):
+            with st.spinner("Searching accounts, then asking AI provider to explain..."):
                 result = run_explore(question.strip(), matches)
             st.session_state["ask_question"] = question.strip()
             st.session_state["ask_explanation"] = result.explanation
@@ -356,7 +356,7 @@ def render_ask(matches: list[dict]) -> None:
         st.caption(f"Question · {st.session_state['ask_question']}")
         if st.session_state.get("ask_error"):
             st.error(st.session_state["ask_error"])
-            st.caption("Showing keyword matches until Gemini is available.")
+            st.caption("Showing keyword matches until AI provider is available.")
         if st.session_state.get("ask_explanation"):
             st.info(st.session_state["ask_explanation"])
 

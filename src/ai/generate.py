@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.ai import cache as ai_cache
-from src.ai.provider import Completion, ProviderError, complete, configured, model_name
+from src.ai.base_provider import Completion, ProviderError
+from src.ai.provider import complete, configured, model_name
 from src.ai.tracing import append_trace, estimate_cost_usd
 
 _CACHE = ai_cache.MemoryCache()
@@ -123,7 +124,7 @@ def run_generation(
             input_tokens=0,
             output_tokens=0,
             cost_usd=0.0,
-            error="No Google AI Studio key found. Set AI_API_KEY or GOOGLE_API_KEY in .env.",
+            error="No AI provider configured. Set AI_API_KEY, GOOGLE_API_KEY, or CLAUDE_API_KEY in .env.",
         )
         _write_trace(workflow, account, prompt, result, result.error)
         return result
@@ -162,11 +163,20 @@ def run_generation(
 
 
 def _write_trace(workflow: str, account: dict, prompt: str, result: GenerationResult, error: str | None) -> None:
+    # Infer provider from model name
+    provider = "unknown"
+    if result.model:
+        if result.model.startswith("claude"):
+            provider = "claude"
+        elif result.model.startswith("gemini"):
+            provider = "gemini"
+
     append_trace(
         {
             "workflow": workflow,
             "prompt_version": result.prompt_version,
             "model": result.model,
+            "provider": provider,
             "domain": account.get("domain"),
             "request": prompt,
             "response": result.text,

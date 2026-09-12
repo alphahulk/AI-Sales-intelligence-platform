@@ -1,106 +1,54 @@
-"""Gemini (Google AI Studio) completions for account workflows."""
+"""AI provider completions with multi-provider support and automatic fallback."""
 
 from __future__ import annotations
 
-import json
 import os
-import time
-import urllib.error
-import urllib.request
-from dataclasses import dataclass
 
-DEFAULT_MODEL = "gemini-3.6-flash"
-GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+from src.ai.base_provider import Completion, ProviderError
+from src.ai.provider_manager import ProviderManager
 
-
-@dataclass
-class Completion:
-    text: str
-    model: str
-    input_tokens: int
-    output_tokens: int
-    latency_ms: int
-    cached: bool = False
+# Global provider manager instance
+_provider_manager: ProviderManager | None = None
 
 
-class ProviderError(RuntimeError):
-    pass
+def _get_provider_manager() -> ProviderManager:
+    global _provider_manager
+    if _provider_manager is None:
+        _provider_manager = ProviderManager()
+    return _provider_manager
 
 
 def api_key() -> str:
-    return (os.getenv("AI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+    """Get API key (legacy compatibility - returns first available key)."""
+    return (
+        os.getenv("AI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("CLAUDE_API_KEY")
+        or os.getenv("ANTHROPIC_API_KEY")
+        or ""
+    ).strip()
 
 
 def configured() -> bool:
-    return bool(api_key())
+    """Check if any AI provider is configured."""
+    return _get_provider_manager().configured()
 
 
 def model_name() -> str:
-    return (os.getenv("AI_MODEL") or DEFAULT_MODEL).strip()
+    """Get the current model name."""
+    return _get_provider_manager().model_name()
 
 
 def complete(prompt: str, *, temperature: float = 0.2) -> Completion:
-    key = api_key()
-    if not key:
-        raise ProviderError(
-            "No Google AI Studio key found. Set AI_API_KEY or GOOGLE_API_KEY in .env."
-        )
-    model = model_name()
-    payload = json.dumps(
-        {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": temperature},
-        }
-    ).encode("utf-8")
-    started = time.perf_counter()
-    body = _post_with_retry(model, key, payload)
-    latency_ms = int((time.perf_counter() - started) * 1000)
-    text = _response_text(body)
-    usage = body.get("usageMetadata") or {}
-    return Completion(
-        text=text,
-        model=model,
-        input_tokens=int(usage.get("promptTokenCount") or 0),
-        output_tokens=int(usage.get("candidatesTokenCount") or 0),
-        latency_ms=latency_ms,
-    )
+    """Generate a completion using available providers with automatic fallback."""
+    return _get_provider_manager().complete(prompt, temperature=temperature)
 
 
-def _post_with_retry(model: str, key: str, payload: bytes, attempts: int = 6) -> dict:
-    last_message = "Gemini request failed"
-    for attempt in range(1, attempts + 1):
-        request = urllib.request.Request(
-            GEMINI_ENDPOINT.format(model=model) + f"?key={key}",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", errors="replace")
-            try:
-                last_message = json.loads(detail).get("error", {}).get("message", detail)
-            except json.JSONDecodeError:
-                last_message = detail or str(error)
-            if error.code == 429 and attempt < attempts:
-                wait = 40 * attempt
-                print(f"Gemini 429, retry {attempt}/{attempts - 1} in {wait}s", flush=True)
-                time.sleep(wait)
-                continue
-            raise ProviderError(f"Gemini request failed ({error.code}): {last_message}") from error
-        except urllib.error.URLError as error:
-            raise ProviderError(f"Could not reach Gemini: {error.reason}") from error
-    raise ProviderError(f"Gemini request failed: {last_message}")
+def get_active_provider() -> str:
+    """Get the name of the currently active provider."""
+    return _get_provider_manager().get_active_provider()
 
 
-def _response_text(body: dict) -> str:
-    candidates = body.get("candidates") or []
-    if not candidates:
-        raise ProviderError(body.get("error", {}).get("message") or "Gemini returned no candidates.")
-    parts = ((candidates[0].get("content") or {}).get("parts")) or []
-    text = "".join(str(part.get("text") or "") for part in parts).strip()
-    if not text:
-        raise ProviderError("Gemini returned an empty response.")
-    return text
+def get_available_providers() -> list[str]:
+    """Get list of available/configured providers."""
+    return _get_provider_manager().get_available_providers()
