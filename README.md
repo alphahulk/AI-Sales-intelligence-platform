@@ -42,4 +42,20 @@ python scripts/build_scores.py data/marts/accounts.parquet data/marts/scored_acc
 
 The raw file is never modified. Curated observations are written in bounded batches as `part-*.parquet`; only after validation should account marts be built. Account aggregation retains all registrable domains and exposes cloud evidence instead of using a hardcoded exclusion list. Signal generation remains deterministic and explainable.
 
-The AI and Streamlit layers are deliberately isolated from ingestion and deterministic scoring.# AI-Sales-intelligence-platform
+The AI and Streamlit layers are deliberately isolated from ingestion and deterministic scoring.
+
+## App
+
+```powershell
+streamlit run app.py
+```
+
+Requires `.env` with optional `DATABASE_URL`, `B2_*`, and Google AI Studio `AI_API_KEY` (see `.env.example`).
+
+## Evals
+
+```powershell
+python evals/run_eval.py
+```
+
+25 labelled prospect-audit cases, prompt v1 vs v2, precision/recall. Details in [evals/README.md](evals/README.md). Planning, architecture, cost, and build notes live under `docs/`.

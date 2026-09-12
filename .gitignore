@@ -7,6 +7,7 @@ data/processed/
 data/curated/
 data/marts/
 data/sales_workspace.db
+data/traces/
 data/*.parquet
 profile_report.json
 reports/*.json

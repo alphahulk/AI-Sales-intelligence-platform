@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 from src.normalization.technologies import NON_TECHNOLOGY_FIELDS
 from src.sales.store import STATUSES, list_accounts, remove_account, save_account, update_account
 from src.storage.b2 import ensure_mart
+from src.workflows.audit import run_prospect_audit
+from src.workflows.meeting import run_meeting_prep
+from src.workflows.outreach import run_outreach_draft
 
 ROOT = Path(__file__).resolve().parent
 MARTS = ROOT / "data" / "marts"
@@ -121,7 +124,7 @@ def render_analytics(account: dict, signals: list[dict]) -> None:
                 "Ports": value(account, "unique_port_count"),
                 "Services": value(account, "unique_service_count"),
                 "Cloud observations": value(account, "cloud_observation_count"),
-            }], use_container_width=True, hide_index=True)
+            }], width="stretch", hide_index=True)
         with right:
             chart = {
                 "Unique IPs": value(account, "unique_ip_count"),
@@ -155,15 +158,25 @@ def render_analytics(account: dict, signals: list[dict]) -> None:
             st.warning(f"**{signal['severity'].upper()}** · {signal['signal_name']} · confidence {signal['confidence']}")
 
 
-def render_signal_summary(accounts: list[dict]) -> None:
-    st.markdown("## Signal bar")
-    st.caption("A portfolio-level view of why matched accounts need attention. Select an account in the radar above for details.")
-    counts = {
-        "Critical vulnerability": sum((item.get("critical_vulnerability_observations") or 0) > 0 for item in accounts),
-        "Exposed database": sum((item.get("exposed_database_count") or 0) > 0 for item in accounts),
-        "Remote access": sum((item.get("exposed_remote_access_count") or 0) > 0 for item in accounts),
-        "EOL product": sum((item.get("eol_observation_count") or 0) > 0 for item in accounts),
-    }
+def render_signal_summary(accounts: list[dict], selected: dict | None = None) -> None:
+    if selected:
+        st.markdown(f"## Signal bar · {selected['domain']}")
+        st.caption("Counts for the selected account. Change the radar row to update this bar.")
+        counts = {
+            "Critical vulnerability": selected.get("critical_vulnerability_observations") or 0,
+            "Exposed database": selected.get("exposed_database_count") or 0,
+            "Remote access": selected.get("exposed_remote_access_count") or 0,
+            "EOL product": selected.get("eol_observation_count") or 0,
+        }
+    else:
+        st.markdown("## Signal bar")
+        st.caption("Portfolio view of filtered accounts. Select a radar row to see that account's signal counts.")
+        counts = {
+            "Critical vulnerability": sum((item.get("critical_vulnerability_observations") or 0) > 0 for item in accounts),
+            "Exposed database": sum((item.get("exposed_database_count") or 0) > 0 for item in accounts),
+            "Remote access": sum((item.get("exposed_remote_access_count") or 0) > 0 for item in accounts),
+            "EOL product": sum((item.get("eol_observation_count") or 0) > 0 for item in accounts),
+        }
     for column, (label, count) in zip(st.columns(4), counts.items()):
         with column:
             metric(label, f"{count:,}")
@@ -181,7 +194,7 @@ def render_radar(accounts: list[dict], limit: int) -> str | None:
             metric(label, f"{value_:,.1f}" if isinstance(value_, float) else f"{value_:,}")
     visible = accounts[:limit]
     rows = [{"Domain": item["domain"], "Opportunity": round(item["opportunity_score"], 1), "Vulnerability": round(item["vulnerability_score"], 1), "Exposure": round(item["exposure_score"], 1), "Critical": item.get("critical_vulnerability_observations", 0), "Databases": item.get("exposed_database_count", 0), "Last observed": str(item.get("last_seen", ""))[:19]} for item in visible]
-    selection = st.dataframe(rows, use_container_width=True, hide_index=True, height=420, on_select="rerun", selection_mode="single-row", key="opportunity_table")
+    selection = st.dataframe(rows, width="stretch", hide_index=True, height=420, on_select="rerun", selection_mode="single-row", key="opportunity_table")
     if not selection.selection.rows:
         return None
     selected_domain = visible[selection.selection.rows[0]]["domain"]
@@ -197,9 +210,21 @@ def render_radar(accounts: list[dict], limit: int) -> str | None:
     return selected_domain
 
 
+def render_generation(result) -> None:
+    if result.error:
+        st.error(result.error)
+        return
+    cached = "cached" if result.cached else f"{result.latency_ms} ms"
+    st.caption(
+        f"{result.model} · {result.prompt_version} · {cached} · "
+        f"{result.input_tokens}+{result.output_tokens} tokens · ${result.cost_usd:.6f}"
+    )
+    st.markdown(result.text)
+
+
 def render_ai(account: dict, signals: list[dict], view: str = "radar") -> None:
     st.title("AI workspace")
-    st.caption("Use one selected account at a time for evidence-led workflows.")
+    st.caption("Each workflow calls Gemini with this account's scores and signals. Opportunity score stays deterministic.")
     widget_key = f"{view}_{str(account['domain']).replace('.', '_')}"
     action = st.segmented_control(
         "Workflow",
@@ -207,13 +232,29 @@ def render_ai(account: dict, signals: list[dict], view: str = "radar") -> None:
         default="Prospect audit",
         key=f"ai_workflow_{widget_key}",
     )
+    st.write(f"{account['domain']} has an opportunity score of {account['opportunity_score']:.1f}.")
+    st.write("Signals:", [signal["signal_name"] for signal in signals[:12]])
     if action == "Prospect audit":
-        st.write(f"{account['domain']} has an opportunity score of {account['opportunity_score']:.1f}.")
-        st.write("Signals:", [signal["signal_name"] for signal in signals])
+        state_key = f"audit_{widget_key}"
+        if st.button("Generate prospect audit", key=f"generate_audit_{widget_key}"):
+            with st.spinner("Calling Gemini with account evidence..."):
+                st.session_state[state_key] = run_prospect_audit(account, signals)
+        if state_key in st.session_state:
+            render_generation(st.session_state[state_key])
     elif action == "Meeting preparation":
-        st.text_area("Meeting brief", "Review the observed attack surface, critical vulnerabilities, exposed services, and remediation ownership before the meeting.", height=220, key=f"meeting_brief_{widget_key}")
+        state_key = f"meeting_{widget_key}"
+        if st.button("Generate meeting brief", key=f"generate_meeting_{widget_key}"):
+            with st.spinner("Calling Gemini with account evidence..."):
+                st.session_state[state_key] = run_meeting_prep(account, signals)
+        if state_key in st.session_state:
+            render_generation(st.session_state[state_key])
     else:
-        st.text_area("Outreach draft", f"Subject: Internet-facing exposure at {account['domain']}\n\nHi {{first_name}},\n\nWe observed security signals associated with {account['domain']}. Would a short conversation about how you monitor your external attack surface be useful?", height=220, key=f"outreach_draft_{widget_key}")
+        state_key = f"outreach_{widget_key}"
+        if st.button("Generate outreach draft", key=f"generate_outreach_{widget_key}"):
+            with st.spinner("Calling Gemini with account evidence..."):
+                st.session_state[state_key] = run_outreach_draft(account, signals)
+        if state_key in st.session_state:
+            render_generation(st.session_state[state_key])
 
 
 def main() -> None:
@@ -226,9 +267,10 @@ def main() -> None:
     with radar_tab:
         st.markdown("# Opportunity radar")
         selected = render_radar(matches, limit)
-        render_signal_summary(matches)
-        if selected:
-            account = next(item for item in accounts if item["domain"] == selected)
+        selected_account = next((item for item in accounts if item["domain"] == selected), None) if selected else None
+        render_signal_summary(matches, selected_account)
+        if selected_account:
+            account = selected_account
             signals = load_signals(selected)
             render_analytics(account, signals)
             st.divider()
@@ -254,7 +296,7 @@ def main() -> None:
                 "Databases": account.get("exposed_database_count", 0),
                 "Last observed": str(account.get("last_seen", ""))[:19],
             } for account in saved]
-            saved_selection = st.dataframe(saved_rows, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", key="saved_accounts_table")
+            saved_selection = st.dataframe(saved_rows, width="stretch", hide_index=True, on_select="rerun", selection_mode="single-row", key="saved_accounts_table")
             if saved_selection.selection.rows:
                 selected = saved[saved_selection.selection.rows[0]]
                 selected_signals = load_signals(selected["domain"])
@@ -262,12 +304,14 @@ def main() -> None:
                 saved_record = saved_by_domain[selected["domain"]]
                 with st.expander("Sales qualification", expanded=True):
                     form_key = selected["domain"].replace(".", "_")
-                    owner = st.text_input("Owner", value=saved_record["owner"], key=f"owner_{form_key}")
-                    status = st.selectbox("Status", STATUSES, index=STATUSES.index(saved_record["status"]), key=f"status_{form_key}")
-                    next_action = st.text_input("Next action", value=saved_record["next_action"], key=f"next_action_{form_key}")
-                    next_action_date = st.text_input("Next action date", value=saved_record["next_action_date"], placeholder="YYYY-MM-DD", key=f"next_date_{form_key}")
-                    notes = st.text_area("Sales notes", value=saved_record["notes"], key=f"notes_{form_key}")
-                    if st.button("Save qualification", key=f"save_qualification_{form_key}"):
+                    with st.form(f"qualification_{form_key}"):
+                        owner = st.text_input("Owner", value=saved_record["owner"])
+                        status = st.selectbox("Status", STATUSES, index=STATUSES.index(saved_record["status"]))
+                        next_action = st.text_input("Next action", value=saved_record["next_action"])
+                        next_action_date = st.text_input("Next action date", value=saved_record["next_action_date"], placeholder="YYYY-MM-DD")
+                        notes = st.text_area("Sales notes", value=saved_record["notes"])
+                        submitted = st.form_submit_button("Save qualification")
+                    if submitted:
                         update_account(SALES_DB, selected["domain"], owner, status, notes, next_action, next_action_date)
                         st.success("Sales qualification saved.")
                 st.divider()
