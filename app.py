@@ -287,10 +287,11 @@ def render_generation(result) -> None:
 
 def render_ai(account: dict, signals: list[dict], view: str = "radar") -> None:
     st.caption("Optional drafts for this domain. Scores stay deterministic.")
-    # Add random suffix to prevent duplicate keys when same account appears in multiple tabs
-    import hashlib
-    domain_hash = hashlib.md5(str(account['domain']).encode()).hexdigest()[:8]
-    widget_key = f"{view}_{domain_hash}"
+    # Use session-based counter to ensure unique keys across renders
+    if "widget_counter" not in st.session_state:
+        st.session_state.widget_counter = 0
+    st.session_state.widget_counter += 1
+    widget_key = f"{view}_{st.session_state.widget_counter}"
     action = st.segmented_control(
         "Workflow",
         ["Prospect audit", "Meeting preparation", "Outreach draft"],
