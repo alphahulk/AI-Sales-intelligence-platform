@@ -208,7 +208,7 @@ def render_analytics(account: dict, signals: list[dict]) -> None:
         for reason in parsed:
             st.caption(f"• {reason}")
     with st.expander("Write audit, meeting brief, or outreach"):
-        render_ai(account, signals, f"panel_{account['domain']}")
+        render_ai(account, signals, "radar")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -287,11 +287,10 @@ def render_generation(result) -> None:
 
 def render_ai(account: dict, signals: list[dict], view: str = "radar") -> None:
     st.caption("Optional drafts for this domain. Scores stay deterministic.")
-    # Use session-based counter to ensure unique keys across renders
-    if "widget_counter" not in st.session_state:
-        st.session_state.widget_counter = 0
-    st.session_state.widget_counter += 1
-    widget_key = f"{view}_{st.session_state.widget_counter}"
+    # Use domain-based key for stable state, but handle the duplicate issue
+    # by not using the view parameter in the key to prevent cross-tab conflicts
+    domain_key = str(account['domain']).replace('.', '_').replace('-', '_')
+    widget_key = f"ai_{domain_key}"
     action = st.segmented_control(
         "Workflow",
         ["Prospect audit", "Meeting preparation", "Outreach draft"],
