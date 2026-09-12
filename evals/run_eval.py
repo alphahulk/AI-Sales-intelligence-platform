@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -36,7 +37,8 @@ def evaluate_version(version: str, cases: list[dict], *, live: bool) -> dict:
     scored = []
     tokens_in = tokens_out = 0
     cost = 0.0
-    for case in cases:
+    for index, case in enumerate(cases, start=1):
+        print(f"  {version} {index}/{len(cases)} {case['id']}", flush=True)
         evidence = build_account_evidence(case["account"], case.get("signals") or [], "prospect_audit")
         prompt = compose_prompt(prompt_path, evidence)
         if live:
@@ -45,6 +47,7 @@ def evaluate_version(version: str, cases: list[dict], *, live: bool) -> dict:
             tokens_in += completion.input_tokens
             tokens_out += completion.output_tokens
             cost += estimate_cost_usd(completion.model, completion.input_tokens, completion.output_tokens)
+            time.sleep(4)
         else:
             text = case.get("fixture_output") or ""
         judged = score_output(text, case["expected"])

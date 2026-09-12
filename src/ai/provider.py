@@ -52,25 +52,8 @@ def complete(prompt: str, *, temperature: float = 0.2) -> Completion:
             "generationConfig": {"temperature": temperature},
         }
     ).encode("utf-8")
-    request = urllib.request.Request(
-        GEMINI_ENDPOINT.format(model=model) + f"?key={key}",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     started = time.perf_counter()
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
-        try:
-            message = json.loads(detail).get("error", {}).get("message", detail)
-        except json.JSONDecodeError:
-            message = detail or str(error)
-        raise ProviderError(f"Gemini request failed ({error.code}): {message}") from error
-    except urllib.error.URLError as error:
-        raise ProviderError(f"Could not reach Gemini: {error.reason}") from error
+    body = _post_with_retry(model, key, payload)
     latency_ms = int((time.perf_counter() - started) * 1000)
     text = _response_text(body)
     usage = body.get("usageMetadata") or {}
@@ -81,6 +64,35 @@ def complete(prompt: str, *, temperature: float = 0.2) -> Completion:
         output_tokens=int(usage.get("candidatesTokenCount") or 0),
         latency_ms=latency_ms,
     )
+
+
+def _post_with_retry(model: str, key: str, payload: bytes, attempts: int = 6) -> dict:
+    last_message = "Gemini request failed"
+    for attempt in range(1, attempts + 1):
+        request = urllib.request.Request(
+            GEMINI_ENDPOINT.format(model=model) + f"?key={key}",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            try:
+                last_message = json.loads(detail).get("error", {}).get("message", detail)
+            except json.JSONDecodeError:
+                last_message = detail or str(error)
+            if error.code == 429 and attempt < attempts:
+                wait = 40 * attempt
+                print(f"Gemini 429, retry {attempt}/{attempts - 1} in {wait}s", flush=True)
+                time.sleep(wait)
+                continue
+            raise ProviderError(f"Gemini request failed ({error.code}): {last_message}") from error
+        except urllib.error.URLError as error:
+            raise ProviderError(f"Could not reach Gemini: {error.reason}") from error
+    raise ProviderError(f"Gemini request failed: {last_message}")
 
 
 def _response_text(body: dict) -> str:

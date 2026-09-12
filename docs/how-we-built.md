@@ -26,6 +26,6 @@ Cursor was fastest on boilerplate (Streamlit layout, boto3 client, eval harness)
 
 ## Weakness to flag to a teammate
 
-**ICP is a constant 50**, and the audit eval is **lexical** (substring precision/recall), not a semantic grader. v2 still can paraphrase around a required CVE string or mention an industry. Do not treat `evals/results/latest.json` as a customer-quality bar without reading failures. Also: qualification and LLM output are not written back to the mart — only to Supabase notes if the seller pastes them.
+**ICP is a technical proxy, not firmographics**, and the audit eval is **lexical** (substring precision/recall), not a semantic grader. Live `evals/run_eval.py` needs a paid or cooled-down Gemini quota (free tier ~20 RPM). Do not treat `evals/results/latest.json` as a customer-quality bar without reading failures. Also: qualification and LLM output are not written back to the mart — only to Supabase notes if the seller pastes them.
 
 Agentic tools used: Cursor (Grok) in-repo, Streamlit locally, Google AI Studio for Gemini, Backblaze B2 for marts, Supabase Postgres for the shortlist.

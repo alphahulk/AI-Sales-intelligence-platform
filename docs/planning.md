@@ -19,7 +19,7 @@ Sellers shortlist domains, set owner/status/next action in Supabase (or local SQ
 ## Use cases we did not build
 
 - Full CRM, sequencing, or mailbox send — out of scope for a prototype; qualification fields are the seam.
-- Firmographic ICP (industry, headcount, installed security stack as a *buyer* attribute) — **not in the source file**. ICP weight is a neutral `50` and called out in scoring docs.
+- Firmographic ICP (industry, headcount, installed security stack as a *buyer* attribute) — **not in the source file**. ICP uses a technical proxy (org-like footprint vs CDN-like cloud) instead of a silent `50`.
 - Letting an LLM rescore the warehouse — expensive and unauditable; rules already produce `score_reasons`.
 
 ## Research → product mapping

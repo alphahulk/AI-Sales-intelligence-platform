@@ -30,7 +30,7 @@ Current component logic uses available account evidence:
 - Vulnerability: critical, high, and total vulnerability observations.
 - Technology: detected technology and service counts.
 - Recency: exponential decay from the latest observed timestamp in the dataset.
-- ICP: neutral `50.0` because the current data does not contain verified industry, company-size, or buying-intent attributes.
+- ICP: technical proxy in `src/scoring/icp.py` (footprint size, services, technologies, countries). Not firmographic industry/headcount — those fields are absent. Rebuild `scored_accounts.parquet` after changing it.
 
 Each scored row also contains `score_reasons`, a JSON list of the evidence that contributed to the ranking.
 

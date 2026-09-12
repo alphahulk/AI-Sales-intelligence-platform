@@ -9,6 +9,8 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from src.scoring.icp import icp_score as technical_icp_score
+
 WEIGHTS = {
     "icp": 0.30,
     "exposure": 0.20,
@@ -60,8 +62,7 @@ def score_account(account: dict, reference_time: datetime) -> dict:
         age_days = max(0.0, (reference_time - last_seen).total_seconds() / 86400.0)
         recency_score = bounded_score(100.0 * math.exp(-age_days / 30.0))
 
-    # No firmographic industry, size, or buying-intent data exists yet.
-    icp_score = 50.0
+    icp_score = technical_icp_score(account)
     components = {
         "icp": icp_score,
         "exposure": exposure_score,

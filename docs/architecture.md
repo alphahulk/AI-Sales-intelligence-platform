@@ -30,7 +30,7 @@ Account identity is the **registrable domain**. Raw `org` is evidence, not a cus
 **Rules** (`scripts/build_scores.py`, `scripts/build_signals.py`):
 
 - Opportunity score = `0.30*ICP + 0.20*exposure + 0.20*vulnerability + 0.20*technology + 0.10*recency`.
-- ICP is `50` because industry/size/intent are absent (honest gap, not a silent 100).
+- ICP is a **technical proxy** (org-like IP/service/tech/geo vs CDN-like cloud sprawl). Industry and headcount are not in the dump; if they appear later, `src/scoring/icp.py` can switch to a target-industry list.
 - Signals are counters and named findings a seller can check.
 
 **LLM** (`src/ai/generate.py`, `src/workflows/*`):
